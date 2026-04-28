@@ -16,55 +16,58 @@ from vcf_parser import Contact
 def _field_score(c: Contact) -> int:
     """Count filled fields — used to decide which duplicate is the 'richest'."""
     score = sum(
-        1 for attr in ['first_name', 'last_name', 'nickname', 'organization', 'title', 'birthday', 'note']
+        1 for attr in ['first_name', 'last_name', 'nickname', 'organization',
+                       'title', 'role', 'birthday', 'anniversary', 'note']
         if getattr(c, attr)
     )
     score += len(c.phones) + len(c.emails) + len(c.addresses)
+    score += len(c.urls) + len(c.custom_fields) + len(c.categories)
     if c.photo_b64:
-        score += 5  # photo is especially valuable
+        score += 5
     return score
 
 
-def _normalize_phone(p: str) -> str:
-    """Strip formatting so '+1 (800) 555-0100' and '+18005550100' are equal."""
-    return ''.join(ch for ch in p if ch.isdigit() or ch == '+')
+def _normalize_phone(p: dict) -> str:
+    """Normalize a phone dict value for comparison."""
+    return ''.join(ch for ch in p['value'] if ch.isdigit() or ch == '+')
 
 
 def _identity_key(c: Contact) -> tuple:
-    """
-    Stable key that uniquely identifies a contact's 'identity'.
-    Two contacts sharing this key are treated as duplicates.
-    """
+    """Stable identity key. Two contacts sharing this key are treated as duplicates."""
     name   = c.full_name.lower().strip()
     phones = tuple(sorted(_normalize_phone(p) for p in c.phones))
-    emails = tuple(sorted(e.lower().strip() for e in c.emails))
+    emails = tuple(sorted(e['value'].lower().strip() for e in c.emails))
     return (name, phones, emails)
 
 
 def _merge_contacts(group: list[Contact]) -> Contact:
     """
     Merge a group of duplicate contacts into one.
-    - Start from the richest contact (most filled fields).
-    - Merge list fields (phones, emails, addresses) — union, no duplicates.
-    - Fill in missing single-value fields from other contacts.
-    - Use the first available photo.
+    - Start from the richest contact.
+    - Merge all list fields (union, no duplicates).
+    - Fill missing single-value fields from other copies.
     """
     base = deepcopy(max(group, key=_field_score))
 
-    def merge_list(base_list: list, other_list: list, normalize) -> None:
-        existing = {normalize(x) for x in base_list}
+    def merge_list(base_list: list, other_list: list, key_fn) -> None:
+        existing = {key_fn(x) for x in base_list}
         for item in other_list:
-            if normalize(item) not in existing:
+            k = key_fn(item)
+            if k not in existing:
                 base_list.append(item)
-                existing.add(normalize(item))
+                existing.add(k)
 
     for other in group:
         merge_list(base.phones,    other.phones,    _normalize_phone)
-        merge_list(base.emails,    other.emails,    lambda x: x.lower().strip())
-        merge_list(base.addresses, other.addresses, lambda x: x.lower().strip())
+        merge_list(base.emails,    other.emails,    lambda x: x['value'].lower().strip())
+        merge_list(base.addresses, other.addresses, lambda x: x['value'].lower().strip())
+        merge_list(base.urls,      other.urls,      lambda x: x['value'].lower().strip())
+        merge_list(base.custom_fields, other.custom_fields,
+                   lambda x: (x['label'].lower(), x['value'].lower()))
+        merge_list(base.categories, other.categories, lambda x: x.lower())
 
-        # Fill single-value fields that base is missing
-        for attr in ['nickname', 'organization', 'title', 'birthday', 'note']:
+        for attr in ['nickname', 'organization', 'title', 'role',
+                     'birthday', 'anniversary', 'note', 'formatted_name']:
             if not getattr(base, attr) and getattr(other, attr):
                 setattr(base, attr, getattr(other, attr))
 
@@ -87,7 +90,6 @@ def deduplicate(contacts: list[Contact], mode: str) -> tuple[list[Contact], int]
     if mode not in ('delete', 'merge'):
         return contacts, 0
 
-    # Group contacts by identity key, preserving first-seen order
     groups: dict[tuple, list[Contact]] = {}
     order: list[tuple] = []
 
@@ -108,7 +110,7 @@ def deduplicate(contacts: list[Contact], mode: str) -> tuple[list[Contact], int]
         elif mode == 'delete':
             result.append(max(group, key=_field_score))
             removed += len(group) - 1
-        else:  # merge
+        else:
             result.append(_merge_contacts(group))
             removed += len(group) - 1
 

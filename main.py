@@ -22,14 +22,18 @@ ctk.set_default_color_theme("blue")
 
 # Field definitions: (key, display label)
 FIELD_DEFS = [
-    ("nickname",     "Nickname"),
-    ("organization", "Organization / Company"),
-    ("title",        "Job Title"),
-    ("phones",       "Phone Numbers"),
-    ("emails",       "Email Addresses"),
-    ("addresses",    "Addresses"),
-    ("birthday",     "Birthday"),
-    ("note",         "Notes"),
+    ("nickname",      "Nickname"),
+    ("organization",  "Organization / Company"),
+    ("title",         "Job Title"),
+    ("role",          "Role"),
+    ("phones",        "Phone Numbers"),
+    ("emails",        "Email Addresses"),
+    ("addresses",     "Addresses"),
+    ("urls",          "Websites"),
+    ("birthday",      "Birthday"),
+    ("anniversary",   "Anniversary"),
+    ("note",          "Notes"),
+    ("custom_fields", "Social / IM / Custom"),
 ]
 
 
