@@ -8,6 +8,7 @@ from typing import Optional
 class Contact:
     first_name: str = ""
     last_name: str = ""
+    formatted_name: str = ""   # FN field — authoritative display name
     nickname: str = ""
     phones: list = field(default_factory=list)
     emails: list = field(default_factory=list)
@@ -21,15 +22,24 @@ class Contact:
 
     @property
     def full_name(self):
+        # FN is the spec-defined display name — always prefer it
+        if self.formatted_name:
+            return self.formatted_name
         name = f"{self.first_name} {self.last_name}".strip()
         return name or self.nickname or self.organization or "No Name"
 
     @property
     def initials(self):
-        parts = self.full_name.split()
+        # Use N components for initials when available (more reliable than FN)
+        if self.first_name or self.last_name:
+            a = (self.first_name or self.last_name)[0]
+            b = self.last_name[0] if self.first_name and self.last_name else a
+            return f"{a}{b}".upper()
+        name = self.full_name
+        parts = name.split()
         if len(parts) >= 2:
             return f"{parts[0][0]}{parts[-1][0]}".upper()
-        return self.full_name[:2].upper()
+        return name[:2].upper()
 
 
 def _unfold(text):
@@ -101,8 +111,7 @@ def parse_vcard(block: str) -> Contact:
             contact.last_name = parts[0].strip() if len(parts) > 0 else ''
             contact.first_name = parts[1].strip() if len(parts) > 1 else ''
         elif prop == 'FN':
-            if not contact.first_name and not contact.last_name:
-                contact.first_name = value.strip()
+            contact.formatted_name = value.strip()
         elif prop == 'NICKNAME':
             contact.nickname = value.strip()
         elif prop == 'TEL':
