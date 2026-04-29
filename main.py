@@ -7,8 +7,11 @@ Runs on macOS, Windows and Linux (requires Python 3.10+).
 
 import os
 import sys
+import json
+import logging
 import threading
 import tkinter as tk
+from pathlib import Path
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
@@ -16,6 +19,31 @@ import customtkinter as ctk
 from vcf_parser  import parse_file
 from html_export import export_single, export_multiple
 from dedup       import deduplicate
+
+# ── Logging setup ─────────────────────────────────────────────────────────────
+_LOG_PATH = Path.home() / ".vcf_converter.log"
+logging.basicConfig(
+    filename=str(_LOG_PATH),
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+log = logging.getLogger(__name__)
+
+# ── Persistent config ─────────────────────────────────────────────────────────
+_CONFIG_PATH = Path.home() / ".vcf_converter_config.json"
+
+def _load_config() -> dict:
+    try:
+        return json.loads(_CONFIG_PATH.read_text(encoding='utf-8'))
+    except Exception:
+        return {}
+
+def _save_config(data: dict) -> None:
+    try:
+        _CONFIG_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+    except Exception as e:
+        log.warning("Could not save config: %s", e)
 
 ctk.set_appearance_mode("system")
 ctk.set_default_color_theme("blue")
@@ -45,17 +73,24 @@ class App(ctk.CTk):
         self.resizable(True, True)
         self.minsize(480, 640)
 
+        cfg = _load_config()
+
         # ── State variables ──────────────────────────────────────────────────
-        self._vcf_path    = tk.StringVar()
-        self._out_path    = tk.StringVar()
-        self._export_mode = tk.StringVar(value="single")   # single | multiple
-        self._grid_style  = tk.StringVar(value="compact")  # compact | expanded
-        self._fields_mode = tk.StringVar(value="all")      # all | custom
-        self._dedup_mode  = tk.StringVar(value="none")     # none | delete | merge
-        self._field_vars  = {k: tk.BooleanVar(value=True) for k, _ in FIELD_DEFS}
+        self._vcf_path    = tk.StringVar(value=cfg.get("vcf_path", ""))
+        self._out_path    = tk.StringVar(value=cfg.get("out_path", ""))
+        self._export_mode = tk.StringVar(value=cfg.get("export_mode", "single"))
+        self._grid_style  = tk.StringVar(value=cfg.get("grid_style", "compact"))
+        self._fields_mode = tk.StringVar(value=cfg.get("fields_mode", "all"))
+        self._dedup_mode  = tk.StringVar(value=cfg.get("dedup_mode", "none"))
+        saved_fields      = cfg.get("field_vars", {})
+        self._field_vars  = {
+            k: tk.BooleanVar(value=saved_fields.get(k, True))
+            for k, _ in FIELD_DEFS
+        }
         self._contacts    = []   # parsed Contact objects
 
         self._build_ui()
+        log.info("App started")
 
     # ── UI helpers ────────────────────────────────────────────────────────────
 
@@ -279,9 +314,20 @@ class App(ctk.CTk):
                 export_multiple(contacts, out, fields, grid_style)
                 msg = f"Saved {len(contacts)} HTML files → {os.path.basename(out)}/{dedup_msg}"
 
+            log.info("Export complete: %s", msg)
+            _save_config({
+                "vcf_path":    self._vcf_path.get(),
+                "out_path":    self._out_path.get(),
+                "export_mode": self._export_mode.get(),
+                "grid_style":  self._grid_style.get(),
+                "fields_mode": self._fields_mode.get(),
+                "dedup_mode":  self._dedup_mode.get(),
+                "field_vars":  {k: v.get() for k, v in self._field_vars.items()},
+            })
             self.after(0, lambda: self._done(msg, out, success=True))
 
         except Exception as e:
+            log.exception("Export failed")
             self.after(0, lambda: self._done(f"Error: {e}", "", success=False))
 
     def _done(self, msg: str, target: str, success: bool):

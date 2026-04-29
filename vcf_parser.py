@@ -343,18 +343,36 @@ def parse_vcard(block: str) -> Contact:
 
 # ── File reader ───────────────────────────────────────────────────────────────
 
+def _detect_encoding(raw: bytes) -> str:
+    """Detect file encoding. Uses charset-normalizer when available, falls back to heuristics."""
+    try:
+        from charset_normalizer import from_bytes
+        result = from_bytes(raw).best()
+        if result:
+            return str(result.encoding)
+    except ImportError:
+        pass
+    # Fallback: BOM check then try common encodings
+    if raw[:2] in (b'\xff\xfe', b'\xfe\xff') or raw[:4] in (b'\xff\xfe\x00\x00', b'\x00\x00\xfe\xff'):
+        return 'utf-16'
+    for enc in ('utf-8', 'latin-1'):
+        try:
+            raw.decode(enc)
+            return enc
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+    return 'latin-1'
+
+
 def parse_file(path: str) -> list[Contact]:
     try:
         with open(path, 'rb') as f:
             raw = f.read()
-        for enc in ('utf-8', 'utf-16', 'latin-1'):
-            try:
-                text = raw.decode(enc)
-                break
-            except (UnicodeDecodeError, UnicodeError):
-                continue
-        else:
-            return []
+        enc = _detect_encoding(raw)
+        try:
+            text = raw.decode(enc)
+        except (UnicodeDecodeError, UnicodeError):
+            text = raw.decode('latin-1', errors='replace')
     except Exception:
         return []
 

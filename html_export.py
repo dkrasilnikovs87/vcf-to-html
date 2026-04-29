@@ -211,8 +211,8 @@ body {
 """
 
 _JS = r"""
-const contacts = CONTACTS_JSON;
-const config   = CONFIG_JSON;
+const contacts = __CONTACTS_DATA__;
+const config   = __CONFIG_DATA__;
 
 // ── Filter state ──────────────────────────────────────────────────────────────
 let filtered    = contacts.slice();
@@ -477,7 +477,7 @@ applyFilters();
 def _build_page(contacts_data: list[dict], config: dict, title: str) -> str:
     contacts_json = json.dumps(contacts_data, ensure_ascii=False)
     config_json   = json.dumps(config,        ensure_ascii=False)
-    js = _JS.replace('CONTACTS_JSON', contacts_json).replace('CONFIG_JSON', config_json)
+    js = _JS.replace('__CONTACTS_DATA__', contacts_json).replace('__CONFIG_DATA__', config_json)
     count = len(contacts_data)
 
     return f"""<!DOCTYPE html>
