@@ -238,7 +238,7 @@ class App(ctk.CTk):
             variable=self._dedup_mode, value="merge"
         ).pack(side="left")
         ctk.CTkCheckBox(
-            self, text="Fuzzy name matching  (Иван Иванов = Иванов Иван)",
+            self, text="Fuzzy name matching  (Anna Maria = Maria Anna)",
             variable=self._fuzzy_dedup, font=ctk.CTkFont(size=12)
         ).pack(anchor="w", padx=20, pady=(6, 0))
         ctk.CTkLabel(
