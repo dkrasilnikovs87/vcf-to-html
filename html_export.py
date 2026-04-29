@@ -9,6 +9,8 @@ New in this version:
 """
 
 import os
+import io
+import base64
 import json
 import html as htmllib
 from vcf_parser import Contact
@@ -23,7 +25,32 @@ def _color(initials: str) -> str:
     return AVATAR_COLORS[sum(ord(c) for c in initials) % len(AVATAR_COLORS)]
 
 
-def _contact_to_dict(c: Contact, idx: int) -> dict:
+def _compress_photo(b64: str, max_size: int) -> str:
+    """
+    Resize and re-encode a Base64 photo using Pillow.
+    max_size=0  → original (no resize, just re-encode to strip EXIF etc.)
+    max_size=-1 → strip photo entirely (caller handles this case)
+    Returns a Base64 JPEG string.
+    """
+    try:
+        from PIL import Image
+        raw = base64.b64decode(b64)
+        img = Image.open(io.BytesIO(raw)).convert("RGB")
+        if max_size > 0 and (img.width > max_size or img.height > max_size):
+            img.thumbnail((max_size, max_size), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=82, optimize=True)
+        return base64.b64encode(buf.getvalue()).decode('ascii')
+    except Exception:
+        return b64   # Pillow not available or decode failed → keep original
+
+
+def _contact_to_dict(c: Contact, idx: int, photo_max_size: int = 0) -> dict:
+    photo = c.photo_b64 or ""
+    if photo and photo_max_size == -1:
+        photo = ""
+    elif photo and photo_max_size != 0:
+        photo = _compress_photo(photo, photo_max_size)
     return {
         "id":            idx,
         "full_name":     c.full_name,
@@ -42,7 +69,7 @@ def _contact_to_dict(c: Contact, idx: int) -> dict:
         "categories":    c.categories,    # ["Family", ...]
         "note":          c.note,
         "custom_fields": c.custom_fields, # [{"label":..., "value":...}]
-        "photo":         c.photo_b64 or "",
+        "photo":         photo,
         "initials":      c.initials,
         "color":         _color(c.initials),
         "raw_vcf":       c.raw_vcf,
@@ -550,25 +577,35 @@ def _make_config(fields: dict, grid_style: str) -> dict:
 
 def export_single(contacts: list[Contact], out_path: str,
                   fields: dict = None, grid_style: str = "compact",
-                  title: str = "Contacts"):
+                  title: str = "Contacts", photo_max_size: int = 0,
+                  progress_cb=None):
     if fields is None:
         fields = _all_fields()
-    data   = [_contact_to_dict(c, i) for i, c in enumerate(contacts)]
+    total = len(contacts)
+    data = []
+    for i, c in enumerate(contacts):
+        data.append(_contact_to_dict(c, i, photo_max_size))
+        if progress_cb:
+            progress_cb((i + 1) / total)
     config = _make_config(fields, grid_style)
     with open(out_path, 'w', encoding='utf-8') as f:
         f.write(_build_page(data, config, title))
 
 
 def export_multiple(contacts: list[Contact], out_dir: str,
-                    fields: dict = None, grid_style: str = "compact"):
+                    fields: dict = None, grid_style: str = "compact",
+                    photo_max_size: int = 0, progress_cb=None):
     if fields is None:
         fields = _all_fields()
     os.makedirs(out_dir, exist_ok=True)
     config = _make_config(fields, grid_style)
+    total = len(contacts)
     for i, c in enumerate(contacts):
-        data = [_contact_to_dict(c, 0)]
+        data = [_contact_to_dict(c, 0, photo_max_size)]
         html = _build_page(data, config, c.full_name)
         safe = "".join(ch for ch in c.full_name if ch.isalnum() or ch in ' _-').strip() or f"contact_{i+1}"
         path = os.path.join(out_dir, f"{i+1:04d}_{safe}.html")
         with open(path, 'w', encoding='utf-8') as f:
             f.write(html)
+        if progress_cb:
+            progress_cb((i + 1) / total)

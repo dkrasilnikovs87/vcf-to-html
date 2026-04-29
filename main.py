@@ -64,14 +64,20 @@ FIELD_DEFS = [
     ("custom_fields", "Social / IM / Custom"),
 ]
 
+PHOTO_OPTIONS = {
+    "Original (no resize)": 0,
+    "Large  (max 1024 px)":  1024,
+    "Medium (max 640 px)":   640,
+    "Small  (max 320 px)":   320,
+    "Strip all photos":      -1,
+}
+
 
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("VCF → HTML Converter")
-        self.geometry("540x760")
         self.resizable(True, True)
-        self.minsize(480, 640)
 
         cfg = _load_config()
 
@@ -82,27 +88,38 @@ class App(ctk.CTk):
         self._grid_style  = tk.StringVar(value=cfg.get("grid_style", "compact"))
         self._fields_mode = tk.StringVar(value=cfg.get("fields_mode", "all"))
         self._dedup_mode  = tk.StringVar(value=cfg.get("dedup_mode", "none"))
+        self._photo_opt   = tk.StringVar(value=cfg.get("photo_opt", list(PHOTO_OPTIONS)[0]))
         saved_fields      = cfg.get("field_vars", {})
         self._field_vars  = {
             k: tk.BooleanVar(value=saved_fields.get(k, True))
             for k, _ in FIELD_DEFS
         }
-        self._contacts    = []   # parsed Contact objects
+        self._contacts    = []
+        self._base_height = 0   # natural window height without checkboxes
 
         self._build_ui()
+
+        # Lock minimum size to natural content height after layout is computed
+        self.update_idletasks()
+        self._base_height = self.winfo_reqheight()
+        self.minsize(520, self._base_height)
+        self.geometry(f"560x{self._base_height}")
+
+        # If config had custom fields open, show them now
+        if self._fields_mode.get() == "custom":
+            self._show_checkboxes(animate=False)
+
         log.info("App started")
 
     # ── UI helpers ────────────────────────────────────────────────────────────
 
     def _section(self, parent, text):
-        """Render a bold section label."""
         ctk.CTkLabel(
             parent, text=text, anchor="w",
             font=ctk.CTkFont(weight="bold"), text_color="#555"
         ).pack(fill="x", padx=20, pady=(16, 4))
 
     def _hrow(self, parent) -> ctk.CTkFrame:
-        """Create and pack a transparent horizontal row frame."""
         row = ctk.CTkFrame(parent, fg_color="transparent")
         row.pack(fill="x", padx=20, pady=0)
         return row
@@ -154,7 +171,7 @@ class App(ctk.CTk):
             command=self._on_export_mode_change
         ).pack(side="left")
 
-        # ── Grid display style (single mode only) ────────────────────────────
+        # ── Grid display style ───────────────────────────────────────────────
         self._section(self, "Grid Display Style")
         ctk.CTkLabel(
             self, text="Applies to single HTML mode only",
@@ -162,15 +179,25 @@ class App(ctk.CTk):
         ).pack(fill="x", padx=20)
         grow = self._hrow(self)
         self._radio_compact = ctk.CTkRadioButton(
-            grow, text="Compact cards  (click card to open)",
+            grow, text="Compact  (click card to open)",
             variable=self._grid_style, value="compact"
         )
         self._radio_compact.pack(side="left", padx=(0, 16))
         self._radio_expanded = ctk.CTkRadioButton(
-            grow, text="Expanded  (all fields visible on card)",
+            grow, text="Expanded  (all fields on card)",
             variable=self._grid_style, value="expanded"
         )
         self._radio_expanded.pack(side="left")
+
+        # ── Photo compression ────────────────────────────────────────────────
+        self._section(self, "Photo Compression")
+        prow = self._hrow(self)
+        ctk.CTkLabel(prow, text="Resize photos:", anchor="w",
+                     font=ctk.CTkFont(size=12)).pack(side="left", padx=(0, 10))
+        ctk.CTkOptionMenu(
+            prow, variable=self._photo_opt,
+            values=list(PHOTO_OPTIONS.keys()), width=220
+        ).pack(side="left")
 
         # ── Fields to include ────────────────────────────────────────────────
         self._section(self, "Fields to Include")
@@ -186,7 +213,7 @@ class App(ctk.CTk):
             command=self._on_fields_mode_change
         ).pack(side="left")
 
-        # Checkboxes container — shown only when "Custom selection" is active
+        # Checkboxes — hidden initially, window grows when shown
         self._check_frame = ctk.CTkFrame(self)
         for i, (key, label) in enumerate(FIELD_DEFS):
             ctk.CTkCheckBox(
@@ -194,7 +221,7 @@ class App(ctk.CTk):
                 variable=self._field_vars[key]
             ).grid(row=i // 2, column=i % 2, sticky="w", padx=14, pady=4)
 
-        # ── Duplicate handling ────────────────────────────────────────────────
+        # ── Duplicate handling ───────────────────────────────────────────────
         self._section(self, "Duplicate Handling")
         drow = self._hrow(self)
         ctk.CTkRadioButton(
@@ -215,32 +242,48 @@ class App(ctk.CTk):
             text_color="#bbb", font=ctk.CTkFont(size=11), anchor="w"
         ).pack(fill="x", padx=20, pady=(2, 0))
 
-        # ── Status + Convert button ──────────────────────────────────────────
+        # ── Status + progress + Convert button ───────────────────────────────
         self._status = ctk.CTkLabel(self, text="", text_color="gray")
-        self._status.pack(pady=(18, 0), padx=20)
+        self._status.pack(pady=(18, 4), padx=20)
+
+        self._progress = ctk.CTkProgressBar(self, height=6)
+        self._progress.set(0)
+        # hidden until conversion starts
 
         self._btn = ctk.CTkButton(
             self, text="Convert", height=44,
             font=ctk.CTkFont(size=15, weight="bold"),
             command=self._convert
         )
-        self._btn.pack(pady=14, padx=20, fill="x")
+        self._btn.pack(pady=(4, 18), padx=20, fill="x")
 
-    # ── Event handlers ─────────────────────────────────────────────────────────
+    # ── Event handlers ────────────────────────────────────────────────────────
 
     def _on_export_mode_change(self):
-        """Disable grid style options when 'one file per contact' is selected."""
         state = "normal" if self._export_mode.get() == "single" else "disabled"
         self._radio_compact.configure(state=state)
         self._radio_expanded.configure(state=state)
 
     def _on_fields_mode_change(self):
-        """Show or hide the field checkboxes based on fields mode selection."""
         if self._fields_mode.get() == "custom":
-            self._check_frame.pack(fill="x", padx=20, pady=(6, 0),
-                                   before=self._status)
+            self._show_checkboxes()
         else:
-            self._check_frame.pack_forget()
+            self._hide_checkboxes()
+
+    def _show_checkboxes(self, animate=True):
+        self._check_frame.pack(fill="x", padx=20, pady=(6, 0), before=self._status)
+        self.update_idletasks()
+        needed = self.winfo_reqheight()
+        current = self.winfo_height()
+        if needed > current:
+            self.geometry(f"{self.winfo_width()}x{needed}")
+        self.minsize(520, needed)
+
+    def _hide_checkboxes(self):
+        self._check_frame.pack_forget()
+        self.update_idletasks()
+        self.geometry(f"{self.winfo_width()}x{self._base_height}")
+        self.minsize(520, self._base_height)
 
     def _browse_input(self):
         path = filedialog.askopenfilename(
@@ -283,11 +326,15 @@ class App(ctk.CTk):
             return
 
         self._btn.configure(state="disabled", text="Converting…")
+        self._progress.set(0)
+        self._progress.pack(pady=(0, 4), padx=20, fill="x", before=self._btn)
         threading.Thread(target=self._run_export, daemon=True).start()
+
+    def _set_progress(self, value: float):
+        self._progress.set(value)
 
     def _run_export(self):
         try:
-            # Build field selection dict
             if self._fields_mode.get() == "all":
                 fields = {k: True for k, _ in FIELD_DEFS}
             else:
@@ -295,7 +342,6 @@ class App(ctk.CTk):
 
             contacts = self._contacts
 
-            # Apply deduplication if requested
             dedup = self._dedup_mode.get()
             if dedup in ('delete', 'merge'):
                 contacts, removed = deduplicate(contacts, dedup)
@@ -303,15 +349,21 @@ class App(ctk.CTk):
             else:
                 dedup_msg = ""
 
+            photo_max_size = PHOTO_OPTIONS.get(self._photo_opt.get(), 0)
             grid_style = self._grid_style.get()
             out        = self._out_path.get()
             title      = os.path.splitext(os.path.basename(self._vcf_path.get()))[0]
 
+            def progress_cb(v):
+                self.after(0, lambda val=v: self._set_progress(val))
+
             if self._export_mode.get() == "single":
-                export_single(contacts, out, fields, grid_style, title)
+                export_single(contacts, out, fields, grid_style, title,
+                              photo_max_size=photo_max_size, progress_cb=progress_cb)
                 msg = f"Saved {len(contacts)} contacts → {os.path.basename(out)}{dedup_msg}"
             else:
-                export_multiple(contacts, out, fields, grid_style)
+                export_multiple(contacts, out, fields, grid_style,
+                                photo_max_size=photo_max_size, progress_cb=progress_cb)
                 msg = f"Saved {len(contacts)} HTML files → {os.path.basename(out)}/{dedup_msg}"
 
             log.info("Export complete: %s", msg)
@@ -322,6 +374,7 @@ class App(ctk.CTk):
                 "grid_style":  self._grid_style.get(),
                 "fields_mode": self._fields_mode.get(),
                 "dedup_mode":  self._dedup_mode.get(),
+                "photo_opt":   self._photo_opt.get(),
                 "field_vars":  {k: v.get() for k, v in self._field_vars.items()},
             })
             self.after(0, lambda: self._done(msg, out, success=True))
@@ -332,6 +385,7 @@ class App(ctk.CTk):
 
     def _done(self, msg: str, target: str, success: bool):
         self._btn.configure(state="normal", text="Convert")
+        self._progress.pack_forget()
         self._status.configure(
             text=msg,
             text_color="#50C878" if success else "#FF6B6B"
