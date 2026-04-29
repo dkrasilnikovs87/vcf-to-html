@@ -65,6 +65,10 @@ def main():
         help="HTML page title (default: input filename without extension)"
     )
     parser.add_argument(
+        "--fuzzy", action="store_true",
+        help="Fuzzy name matching for dedup (Иван Иванов = Иванов Иван)"
+    )
+    parser.add_argument(
         "--quiet", "-q", action="store_true",
         help="Suppress progress output"
     )
@@ -85,9 +89,10 @@ def main():
         print(f"  Loaded {len(contacts)} contacts")
 
     if args.dedup in ("delete", "merge"):
-        contacts, removed = deduplicate(contacts, args.dedup)
+        contacts, removed = deduplicate(contacts, args.dedup, fuzzy=args.fuzzy)
         if not args.quiet:
-            print(f"  Dedup ({args.dedup}): {removed} removed, {len(contacts)} remaining")
+            fuzzy_note = " fuzzy" if args.fuzzy else ""
+            print(f"  Dedup ({args.dedup}{fuzzy_note}): {removed} removed, {len(contacts)} remaining")
 
     # Build fields dict
     if args.fields:

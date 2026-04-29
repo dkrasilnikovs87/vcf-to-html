@@ -1,0 +1,30 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Alice Wonder
+N:Wonder;Alice;;;
+TEL;TYPE=CELL:+5550001111
+EMAIL:alice@example.com
+ORG:Wonderland Inc
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Alice Wonder
+N:Wonder;Alice;;;
+TEL;TYPE=CELL:+5550001111
+EMAIL:alice@example.com
+NOTE:This is a duplicate with extra note
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Wonder Alice
+N:Alice;Wonder;;;
+TEL;TYPE=CELL:+5550001111
+EMAIL:alice@example.com
+TITLE:CEO
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Bob Builder
+N:Builder;Bob;;;
+TEL;TYPE=CELL:+5559999999
+END:VCARD

@@ -40,6 +40,17 @@ def _identity_key(c: Contact) -> tuple:
     return (name, phones, emails)
 
 
+def _identity_key_fuzzy(c: Contact) -> tuple:
+    """
+    Fuzzy identity key: name parts are sorted so 'Ivan Ivanov' == 'Ivanov Ivan'.
+    Still requires phones and emails to match to avoid false positives.
+    """
+    parts  = frozenset(c.full_name.lower().split())
+    phones = tuple(sorted(_normalize_phone(p) for p in c.phones))
+    emails = tuple(sorted(e['value'].lower().strip() for e in c.emails))
+    return (parts, phones, emails)
+
+
 def _merge_contacts(group: list[Contact]) -> Contact:
     """
     Merge a group of duplicate contacts into one.
@@ -77,24 +88,29 @@ def _merge_contacts(group: list[Contact]) -> Contact:
     return base
 
 
-def deduplicate(contacts: list[Contact], mode: str) -> tuple[list[Contact], int]:
+def deduplicate(contacts: list[Contact], mode: str,
+                fuzzy: bool = False) -> tuple[list[Contact], int]:
     """
     Remove or merge duplicate contacts.
 
     mode:
         'delete' — keep the richest copy, discard the rest
         'merge'  — combine all copies into one contact
+    fuzzy:
+        False (default) — exact name match
+        True  — name parts sorted so 'Ivan Ivanov' == 'Ivanov Ivan'
 
     Returns (result_list, number_of_contacts_removed).
     """
     if mode not in ('delete', 'merge'):
         return contacts, 0
 
-    groups: dict[tuple, list[Contact]] = {}
-    order: list[tuple] = []
+    key_fn = _identity_key_fuzzy if fuzzy else _identity_key
+    groups: dict = {}
+    order: list = []
 
     for c in contacts:
-        key = _identity_key(c)
+        key = key_fn(c)
         if key not in groups:
             groups[key] = []
             order.append(key)

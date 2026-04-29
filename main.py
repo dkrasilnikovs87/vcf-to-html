@@ -88,6 +88,7 @@ class App(ctk.CTk):
         self._grid_style  = tk.StringVar(value=cfg.get("grid_style", "compact"))
         self._fields_mode = tk.StringVar(value=cfg.get("fields_mode", "all"))
         self._dedup_mode  = tk.StringVar(value=cfg.get("dedup_mode", "none"))
+        self._fuzzy_dedup = tk.BooleanVar(value=cfg.get("fuzzy_dedup", False))
         self._photo_opt   = tk.StringVar(value=cfg.get("photo_opt", list(PHOTO_OPTIONS)[0]))
         saved_fields      = cfg.get("field_vars", {})
         self._field_vars  = {
@@ -236,6 +237,10 @@ class App(ctk.CTk):
             drow, text="Merge duplicates",
             variable=self._dedup_mode, value="merge"
         ).pack(side="left")
+        ctk.CTkCheckBox(
+            self, text="Fuzzy name matching  (Иван Иванов = Иванов Иван)",
+            variable=self._fuzzy_dedup, font=ctk.CTkFont(size=12)
+        ).pack(anchor="w", padx=20, pady=(6, 0))
         ctk.CTkLabel(
             self,
             text="Duplicates: same name + same phones + same emails → treated as one",
@@ -344,7 +349,8 @@ class App(ctk.CTk):
 
             dedup = self._dedup_mode.get()
             if dedup in ('delete', 'merge'):
-                contacts, removed = deduplicate(contacts, dedup)
+                contacts, removed = deduplicate(contacts, dedup,
+                                                fuzzy=self._fuzzy_dedup.get())
                 dedup_msg = f" ({removed} duplicate{'s' if removed != 1 else ''} {'removed' if dedup == 'delete' else 'merged'})"
             else:
                 dedup_msg = ""
@@ -374,6 +380,7 @@ class App(ctk.CTk):
                 "grid_style":  self._grid_style.get(),
                 "fields_mode": self._fields_mode.get(),
                 "dedup_mode":  self._dedup_mode.get(),
+                "fuzzy_dedup": self._fuzzy_dedup.get(),
                 "photo_opt":   self._photo_opt.get(),
                 "field_vars":  {k: v.get() for k, v in self._field_vars.items()},
             })

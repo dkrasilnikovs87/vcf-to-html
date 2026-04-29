@@ -1,0 +1,13 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Alex Social
+N:Social;Alex;;;
+TEL;TYPE=CELL:+1111111111
+X-SKYPE:alex.skype
+X-TELEGRAM:@alex_telegram
+X-WHATSAPP:+1111111111
+IMPP:xmpp:alex@jabber.org
+CATEGORIES:Friends,Work
+ROLE:Developer
+ANNIVERSARY:2020-01-15
+END:VCARD

@@ -322,6 +322,7 @@ function updateCount() {
 // ── Grid rendering ────────────────────────────────────────────────────────────
 function renderGrid() {
     const container = document.getElementById('cards');
+    container.innerHTML = '';
     if (!filtered.length) {
         container.innerHTML = '<div class="empty">No contacts match the current filters</div>';
         return;
@@ -338,16 +339,23 @@ function renderGrid() {
     });
 
     const cardMin = config.grid_style === 'expanded' ? '260px' : '175px';
-    let html = '';
+    const frag = document.createDocumentFragment();
+
     for (const letter of letters) {
-        html += `<div class="alpha-header">${letter}</div>`;
-        html += `<div class="grid" style="--card-min:${cardMin}">`;
-        for (const c of groupMap.get(letter)) {
-            html += config.grid_style === 'expanded' ? renderExpandedCard(c) : renderCompactCard(c);
-        }
-        html += `</div>`;
+        const hdr = document.createElement('div');
+        hdr.className = 'alpha-header';
+        hdr.textContent = letter;
+        frag.appendChild(hdr);
+
+        const grid = document.createElement('div');
+        grid.className = 'grid';
+        grid.style.setProperty('--card-min', cardMin);
+        grid.innerHTML = groupMap.get(letter)
+            .map(c => config.grid_style === 'expanded' ? renderExpandedCard(c) : renderCompactCard(c))
+            .join('');
+        frag.appendChild(grid);
     }
-    container.innerHTML = html;
+    container.appendChild(frag);
 }
 
 function renderCompactCard(c) {
