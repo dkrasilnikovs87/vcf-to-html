@@ -145,6 +145,12 @@ Output: `dist/VCF Converter.app` (macOS) · `dist/VCF Converter/VCF Converter.ex
 
 Tested on macOS 15 (Apple Silicon). Should work on Windows 10+ and Linux with Python 3.10+.
 
+## Author
+
+**Dmitrijs Krasilnikovs** — [github.com/dkrasilnikovs87](https://github.com/dkrasilnikovs87)
+
+Feel free to open an issue or a pull request.
+
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md).

@@ -746,6 +746,14 @@ def _build_page(contacts_data: list[dict], config: dict, title: str) -> str:
     <img id="lb-img" src="" alt="">
 </div>
 
+<footer style="text-align:center;padding:28px 20px 18px;color:#ccc;font-size:0.74rem;font-family:-apple-system,sans-serif">
+    Created with <a href="https://github.com/dkrasilnikovs87/vcf-to-html" target="_blank"
+    style="color:#bbb;text-decoration:none">VCF Converter</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/dkrasilnikovs87" target="_blank"
+    style="color:#bbb;text-decoration:none">Dmitrijs Krasilnikovs</a>
+</footer>
+
 <script>{js}</script>
 </body>
 </html>"""

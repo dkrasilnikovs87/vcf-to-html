@@ -266,7 +266,17 @@ class App(ctk.CTk):
             font=ctk.CTkFont(size=15, weight="bold"),
             command=self._convert
         )
-        self._btn.pack(pady=(4, 18), padx=20, fill="x")
+        self._btn.pack(pady=(4, 10), padx=20, fill="x")
+
+        # ── Author footer ────────────────────────────────────────────────────
+        import webbrowser
+        author = ctk.CTkLabel(
+            self,
+            text="by Dmitrijs Krasilnikovs  ·  github.com/dkrasilnikovs87",
+            text_color="#aaa", font=ctk.CTkFont(size=11), cursor="hand2"
+        )
+        author.pack(pady=(0, 12))
+        author.bind("<Button-1>", lambda e: webbrowser.open("https://github.com/dkrasilnikovs87"))
 
     # ── Event handlers ────────────────────────────────────────────────────────
 
