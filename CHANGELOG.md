@@ -1,65 +1,75 @@
 # Changelog
 
+## [1.3.0] - 2026-04-30
+
+### Added
+- **CSV export** — new export mode produces a `.csv` file (UTF-8 with BOM so Excel and Numbers open it correctly on all platforms without encoding issues); multi-value fields joined with ` | `; available in both GUI and CLI (`--mode csv`)
+- **In-browser HTML editing** — "✎ Edit" button in the HTML output toggles edit mode; in edit mode each card shows a ✕ delete badge; clicking a card opens an edit form with inputs for name, phones, emails and note; "Save" updates the contact in-place; "Delete Contact" removes it with a confirmation prompt; "⬇ Save HTML" in the header downloads a new self-contained HTML file with all changes applied
+- **GitHub Actions CI** (`.github/workflows/build.yml`) — on every version tag push, builds macOS `.app`, Windows `.exe` folder and Linux binary automatically and attaches them to the GitHub Release; no manual packaging needed
+- **vCard 4.0 quoted TYPE params** — `TYPE="work,voice"` now stripped of quotes before parsing so labels resolve correctly
+
+### Fixed
+- **Progress bar clamping** — `_progress_bar()` in `cli.py` now clamps `value` to `[0.0, 1.0]` with `min(1.0, max(0.0, value))` to prevent index-out-of-range on floating-point rounding
+- **`</script>` injection** — JSON data injected into `<script>` tags now has `</` replaced with `<\/` so a contact note containing `</script>` cannot break the HTML page
+
+### Changed
+- App renamed from "VCF → HTML Converter" to **"VCF Converter"** — reflects the broader export scope (HTML + CSV)
+- Export Mode radio group now has three options: Single HTML / One HTML per contact / CSV file
+- Photo compression OptionMenu is disabled when CSV mode is selected (not applicable)
+- README rewritten with download table, full CLI reference, CI build notes and macOS Gatekeeper caveat
+
+---
+
 ## [1.2.0] - 2026-04-29
 
 ### Added
-- **Photo compression** — resize photos before embedding using Pillow (Original / Large 1024 px / Medium 640 px / Small 320 px / Strip all); dramatically reduces output file size for large contact books with photos
-- **Progress bar** — `CTkProgressBar` appears during conversion and hides on completion
-- **Command-line interface** (`cli.py`) — full `argparse` CLI with `--mode`, `--grid`, `--dedup`, `--fuzzy`, `--photo`, `--fields`, `--title`, `--quiet` flags; usable in automation scripts
-- **Fuzzy name matching** — optional dedup mode where name parts are sorted before comparison, so "Anna Maria" and "Maria Anna" are treated as the same person; phones and emails still required to match
-- **Persistent settings** — all options saved to `~/.vcf_converter_config.json` on each successful export and restored on next launch
-- **Logging** — structured log written to `~/.vcf_converter.log` with timestamps; full traceback on export errors
-- **Automatic encoding detection** via `charset-normalizer` — covers Windows-1251, CP1252 and other regional encodings in addition to UTF-8, UTF-16 and Latin-1
-- **Test suite** — 34 pytest tests covering the parser (vCard 2.1/3.0, QP encoding, RFC line folding, typed fields, social profiles, categories, catch-all) and dedup logic (delete/merge, richest-copy selection, fuzzy matching, false-positive guards); sample `.vcf` fixtures in `tests/samples/`
+- **Photo compression** — resize photos before embedding using Pillow (Original / Large 1024 px / Medium 640 px / Small 320 px / Strip all)
+- **Progress bar** — `CTkProgressBar` shown during conversion, hidden at rest
+- **CLI** (`cli.py`) — full `argparse` interface with `--mode`, `--grid`, `--dedup`, `--fuzzy`, `--photo`, `--fields`, `--title`, `--quiet`
+- **Fuzzy name matching** — optional dedup mode where name parts are sorted before comparison (Anna Maria = Maria Anna); phones and emails still required to match
+- **Persistent settings** — saved to `~/.vcf_converter_config.json`, restored on next launch
+- **Logging** — `~/.vcf_converter.log` with timestamps and full tracebacks
+- **Automatic encoding detection** via `charset-normalizer` (Windows-1251, CP1252 and other regional encodings)
+- **Test suite** — 34 pytest tests with sample `.vcf` fixtures
 
 ### Fixed
-- **Template injection risk** — replaced `CONTACTS_JSON` / `CONFIG_JSON` placeholders with `__CONTACTS_DATA__` / `__CONFIG_DATA__` to prevent collision when contact notes contain the placeholder string
-- **Window sizing** — window now measures its own natural height after layout and sets that as the minimum size; Convert button can no longer be scrolled off-screen; window grows when the custom field checklist is shown and shrinks when hidden
-- **Radio button label truncation** — shortened radio button text to fit without clipping at any window width
+- Template injection risk (`CONTACTS_JSON` → `__CONTACTS_DATA__` safe placeholder)
+- Window sizing — Convert button can no longer be scrolled off-screen
+- Custom field checklist grows/shrinks the window instead of overlapping content
 
 ### Changed
-- `renderGrid()` in the HTML output now uses `DocumentFragment` — one DOM write per alphabetical group instead of one massive `innerHTML` on the whole container; noticeably faster at 1000+ contacts
-- `deduplicate()` accepts a `fuzzy` parameter (default `False`) for backwards compatibility
-- `requirements.txt` adds `charset-normalizer>=3.0.0` and `Pillow>=10.0.0`
-- All UI labels, comments, and documentation are now in English
+- `renderGrid()` uses `DocumentFragment` for faster rendering at 1000+ contacts
+- All UI labels, comments and documentation in English
 
 ---
 
 ## [1.1a] - 2026-04-28
 
 ### Added
-- **Phone/email/address type labels** — Mobile, Home, Work, Fax etc. now shown next to each value
-- **Website field** — URLs from the `URL` property are now parsed and displayed
-- **Social & IM profiles** — Skype, Telegram, WhatsApp, ICQ, AIM, MSN, Yahoo, Jabber, Viber, LINE, WeChat, Facebook, Twitter, LinkedIn, Instagram and more (via `X-*` and `IMPP` fields)
-- **ROLE field** — role within organization, separate from job title
-- **ANNIVERSARY field** — anniversary date parsed and displayed
-- **CATEGORIES field** — contact groups/tags shown as chips in the detail view
-- **Custom fields catch-all** — any unknown vCard property is captured and shown rather than silently discarded
-- **Rich filter bar** — quick filter chips: Photo, Mobile, Email, Website, Address, Note, Birthday, Social, Category
-- **Organization dropdown filter** — filter contacts by organization with one click
-- **Live contact count** — shows "42 of 150" when filters are active
-- **Scroll position restored** on Back navigation (was resetting to top)
+- Typed phone/email/address labels (Mobile, Home, Work, Fax …)
+- Website field (`URL` property)
+- Social & IM profiles via `X-*` and `IMPP` (Skype, Telegram, WhatsApp, ICQ, AIM, MSN, Yahoo, Jabber, Viber, LINE, WeChat, Facebook, Twitter, LinkedIn, Instagram)
+- `ROLE`, `ANNIVERSARY`, `CATEGORIES` fields
+- Custom fields catch-all — unknown properties captured and displayed
+- Rich filter bar — chips: Photo, Mobile, Email, Website, Address, Note, Birthday, Social, Category
+- Organization dropdown filter + live contact count
+- Scroll position restored on Back navigation
 
 ### Fixed
-- **Contact names truncated** — `FN` (Formatted Name) is now always used as the authoritative display name; previously it was ignored if `N` components were already set
-- **Long field values truncated** — vCard 2.1 Quoted-Printable multi-line values (soft breaks with `=`) are now correctly joined before decoding
-- **Duplicate handling** updated for new typed data structures (phones/emails stored as `{value, type}` objects)
-
-### Changed
-- Phones, emails, addresses are now stored as `{value, type}` objects throughout the pipeline
-- Detail view and expanded card mode show type labels alongside each phone and email
-- `custom_fields`, `role`, `urls`, `anniversary` added to the GUI field selector
+- Contact name truncation — `FN` now used as authoritative display name
+- Quoted-Printable multi-line values (soft breaks) joined correctly before decoding
+- Duplicate handling updated for typed `{value, type}` data structures
 
 ---
 
 ## [1.0.0] - 2026-04-28
 
 ### Initial Release
-- Parse vCard 2.1 and 3.0 files (UTF-8, UTF-16-LE, Latin-1)
+- Parse vCard 2.1 and 3.0 (UTF-8, UTF-16-LE, Latin-1)
 - Quoted-Printable and Base64 decoding
-- Contacts grouped by alphabetical sections
-- Two grid modes: compact clickable cards / expanded with all fields
+- Alphabetical contact groups
+- Two grid modes: compact / expanded
 - Detail page with photo lightbox and single-contact VCF export
-- Duplicate detection: delete (keep richest) or merge (combine all fields)
+- Duplicate detection: delete or merge
 - Custom field selection in GUI
-- Self-contained HTML output — no external dependencies
+- Self-contained HTML output

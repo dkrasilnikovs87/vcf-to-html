@@ -178,7 +178,7 @@ def _extract_type(params: dict, type_map: dict) -> str:
     Handles both vCard 3.0 (TYPE=X) and vCard 2.1 (bare param X) styles.
     """
     if 'TYPE' in params:
-        candidates = [t.strip().upper() for t in params['TYPE'].split(',')]
+        candidates = [t.strip().upper() for t in params['TYPE'].replace('"', '').split(',')]
     else:
         # vCard 2.1: type names appear as bare param keys
         candidates = [k.upper() for k in params]

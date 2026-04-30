@@ -17,7 +17,7 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
 from vcf_parser  import parse_file
-from html_export import export_single, export_multiple
+from html_export import export_single, export_multiple, export_csv
 from dedup       import deduplicate
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
@@ -76,7 +76,7 @@ PHOTO_OPTIONS = {
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("VCF → HTML Converter")
+        self.title("VCF Converter")
         self.resizable(True, True)
 
         cfg = _load_config()
@@ -130,11 +130,11 @@ class App(ctk.CTk):
     def _build_ui(self):
         # Title
         ctk.CTkLabel(
-            self, text="VCF → HTML Converter",
+            self, text="VCF Converter",
             font=ctk.CTkFont(size=20, weight="bold")
         ).pack(pady=(22, 2))
         ctk.CTkLabel(
-            self, text="Convert vCard contacts to an interactive HTML file",
+            self, text="Convert vCard contacts to HTML or CSV",
             text_color="gray"
         ).pack(pady=(0, 6))
 
@@ -162,13 +162,18 @@ class App(ctk.CTk):
         self._section(self, "Export Mode")
         mrow = self._hrow(self)
         ctk.CTkRadioButton(
-            mrow, text="Single HTML file (all contacts)",
+            mrow, text="Single HTML  (all contacts)",
             variable=self._export_mode, value="single",
             command=self._on_export_mode_change
-        ).pack(side="left", padx=(0, 16))
+        ).pack(side="left", padx=(0, 12))
         ctk.CTkRadioButton(
-            mrow, text="One file per contact",
+            mrow, text="One HTML per contact",
             variable=self._export_mode, value="multiple",
+            command=self._on_export_mode_change
+        ).pack(side="left", padx=(0, 12))
+        ctk.CTkRadioButton(
+            mrow, text="CSV file",
+            variable=self._export_mode, value="csv",
             command=self._on_export_mode_change
         ).pack(side="left")
 
@@ -195,10 +200,11 @@ class App(ctk.CTk):
         prow = self._hrow(self)
         ctk.CTkLabel(prow, text="Resize photos:", anchor="w",
                      font=ctk.CTkFont(size=12)).pack(side="left", padx=(0, 10))
-        ctk.CTkOptionMenu(
+        self._photo_menu = ctk.CTkOptionMenu(
             prow, variable=self._photo_opt,
             values=list(PHOTO_OPTIONS.keys()), width=220
-        ).pack(side="left")
+        )
+        self._photo_menu.pack(side="left")
 
         # ── Fields to include ────────────────────────────────────────────────
         self._section(self, "Fields to Include")
@@ -265,9 +271,12 @@ class App(ctk.CTk):
     # ── Event handlers ────────────────────────────────────────────────────────
 
     def _on_export_mode_change(self):
-        state = "normal" if self._export_mode.get() == "single" else "disabled"
-        self._radio_compact.configure(state=state)
-        self._radio_expanded.configure(state=state)
+        html_single = self._export_mode.get() == "single"
+        html_any    = self._export_mode.get() in ("single", "multiple")
+        self._radio_compact.configure(state="normal" if html_single else "disabled")
+        self._radio_expanded.configure(state="normal" if html_single else "disabled")
+        # Photo compression and grid options make no sense for CSV
+        self._photo_menu.configure(state="normal" if html_any else "disabled")
 
     def _on_fields_mode_change(self):
         if self._fields_mode.get() == "custom":
@@ -306,11 +315,18 @@ class App(ctk.CTk):
         )
 
     def _browse_output(self):
-        if self._export_mode.get() == "single":
+        mode = self._export_mode.get()
+        if mode == "single":
             path = filedialog.asksaveasfilename(
                 title="Save HTML file as",
                 defaultextension=".html",
                 filetypes=[("HTML files", "*.html")]
+            )
+        elif mode == "csv":
+            path = filedialog.asksaveasfilename(
+                title="Save CSV file as",
+                defaultextension=".csv",
+                filetypes=[("CSV files", "*.csv")]
             )
         else:
             path = filedialog.askdirectory(title="Select output folder")
@@ -363,9 +379,13 @@ class App(ctk.CTk):
             def progress_cb(v):
                 self.after(0, lambda val=v: self._set_progress(val))
 
-            if self._export_mode.get() == "single":
+            mode = self._export_mode.get()
+            if mode == "single":
                 export_single(contacts, out, fields, grid_style, title,
                               photo_max_size=photo_max_size, progress_cb=progress_cb)
+                msg = f"Saved {len(contacts)} contacts → {os.path.basename(out)}{dedup_msg}"
+            elif mode == "csv":
+                export_csv(contacts, out, fields, progress_cb=progress_cb)
                 msg = f"Saved {len(contacts)} contacts → {os.path.basename(out)}{dedup_msg}"
             else:
                 export_multiple(contacts, out, fields, grid_style,

@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 from vcf_parser  import parse_file
-from html_export import export_single, export_multiple
+from html_export import export_single, export_multiple, export_csv
 from dedup       import deduplicate
 
 ALL_FIELDS = [
@@ -24,6 +24,7 @@ ALL_FIELDS = [
 
 
 def _progress_bar(value: float, width: int = 40) -> str:
+    value = min(1.0, max(0.0, value))
     filled = int(width * value)
     bar = "█" * filled + "░" * (width - filled)
     return f"\r[{bar}] {int(value * 100):3d}%"
@@ -40,8 +41,8 @@ def main():
     parser.add_argument("output", help="Output .html file, or folder when --mode=multiple")
 
     parser.add_argument(
-        "--mode", choices=["single", "multiple"], default="single",
-        help="single: one HTML file (default) | multiple: one file per contact"
+        "--mode", choices=["single", "multiple", "csv"], default="single",
+        help="single: one HTML file (default) | multiple: one HTML per contact | csv: CSV file"
     )
     parser.add_argument(
         "--grid", choices=["compact", "expanded"], default="compact",
@@ -113,7 +114,9 @@ def main():
     if not args.quiet:
         print(f"Exporting → {args.output}…")
 
-    if args.mode == "single":
+    if args.mode == "csv":
+        export_csv(contacts, args.output, fields, progress_cb=progress_cb)
+    elif args.mode == "single":
         export_single(contacts, args.output, fields, args.grid, title,
                       photo_max_size=args.photo, progress_cb=progress_cb)
     else:

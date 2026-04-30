@@ -1,49 +1,67 @@
-# VCF → HTML Converter
+# VCF Converter
 
-A cross-platform desktop app that converts vCard contact files (`.vcf`) into a beautiful, self-contained interactive HTML file. Also available as a command-line tool for automation.
+A cross-platform desktop app that converts vCard contact files (`.vcf`) into an interactive HTML file or a CSV spreadsheet. Also available as a command-line tool for scripting and automation.
+
+## Download
+
+Pre-built binaries are attached to each [GitHub Release](https://github.com/dkrasilnikovs87/vcf-to-html/releases):
+
+| Platform | File | Notes |
+|---|---|---|
+| macOS | `VCF-Converter-macOS.zip` | Extract and run `VCF Converter.app`. Gatekeeper may warn on first launch — right-click → Open to bypass. |
+| Windows | `VCF-Converter-Windows.zip` | Extract the folder, run `VCF Converter.exe`. SmartScreen may warn — click "More info → Run anyway". |
+| Linux | `VCF-Converter-Linux.tar.gz` | Extract, then run the `VCF Converter` executable inside the folder. |
+
+> Binaries are built automatically via GitHub Actions on every release tag — no manual packaging.
 
 ## Features
 
-### HTML Output
-- **Interactive grid** — contacts grouped alphabetically with instant search
-- **Two display modes** — compact clickable cards or expanded cards showing all fields inline
-- **Detail page** — click any contact to see full info with a photo lightbox
-- **Typed fields** — phones and emails shown with labels: Mobile, Home, Work, Fax …
-- **Rich filter bar** — one-click filters: Photo, Mobile, Email, Website, Address, Note, Birthday, Social, Category
-- **Organization dropdown** — filter all contacts by company
-- **Export to VCF** — download any single contact back as a `.vcf` file
-- **Fully self-contained** — one `.html` file, no external dependencies, works offline
+### Export formats
+- **Interactive HTML** — self-contained single file, no external dependencies, works offline
+- **CSV** — UTF-8 with BOM for correct Excel / Numbers opening on all platforms
 
-### Parser
+### HTML output
+- Contacts grouped alphabetically with instant search
+- Two grid modes: compact clickable cards or expanded cards with all fields visible
+- Rich filter bar — one-click chips: Photo, Mobile, Email, Website, Address, Note, Birthday, Social, Category
+- Organization dropdown filter
+- Live count ("42 of 150")
+- Detail page with photo lightbox and typed field rows (Mobile, Home, Work …)
+- Categories shown as tags
+- **In-browser editing** — toggle Edit Mode to delete contacts or correct field values, then download the updated HTML
+
+### vCard parser
 - vCard 2.1, 3.0 and 4.0
-- Automatic encoding detection via `charset-normalizer` — UTF-8, UTF-16, Latin-1, Windows-1251 and more
-- Quoted-Printable encoded fields, including multi-line soft-break values
+- Automatic encoding detection (`charset-normalizer`) — UTF-8, UTF-16, Latin-1, Windows-1251, CP1252 and more
+- RFC 6350 line folding and Quoted-Printable multi-line soft-break joining
 - Inline Base64 photos
-- Phone / email / address type labels (HOME, WORK, CELL, FAX …)
-- Websites (`URL` field)
-- Social & IM profiles — Skype, Telegram, WhatsApp, ICQ, AIM, MSN, Jabber, Viber, Twitter, LinkedIn, Facebook, Instagram and more (`X-*` and `IMPP` fields)
+- Typed phone / email / address labels (CELL→Mobile, HOME→Home, WORK→Work, FAX→Fax …)
+- vCard 4.0 `TYPE="work,voice"` quoted params handled correctly
+- Websites (`URL`), Social & IM profiles (`X-*` and `IMPP` — Skype, Telegram, WhatsApp, ICQ, Viber, Twitter, LinkedIn, Facebook, Instagram and more)
 - Role, Anniversary, Categories
-- Catch-all for any unknown field — nothing is silently lost
+- Catch-all for any unknown field — nothing is silently discarded
 
-### Duplicate Handling
+### Duplicate handling
 - **Delete** — keep the richest copy (most filled fields), discard the rest
-- **Merge** — combine all copies into one contact (union of all phones, emails, etc.)
-- **Fuzzy name matching** — treats "Anna Maria" and "Maria Anna" as the same person
-- Detection based on: same name + same phones + same emails
+- **Merge** — combine all copies into one (union of phones, emails, etc.)
+- **Fuzzy name matching** — "Anna Maria" and "Maria Anna" are treated as the same person; phones and emails still required to match
 
-### Photo Compression
-- Resize photos before embedding using Pillow: Original / Large (1024 px) / Medium (640 px) / Small (320 px) / Strip all
-- Dramatically reduces output file size for large contact books with photos
+### Photo compression (HTML export)
+Resize photos with Pillow before embedding in Base64:
 
-### Persistent Settings
-- All options (paths, export mode, field selection, dedup mode) are saved automatically and restored on next launch
+| Option | Max dimension |
+|---|---|
+| Original (no resize) | — |
+| Large | 1024 px |
+| Medium | 640 px |
+| Small | 320 px |
+| Strip all photos | — |
 
-### Command-Line Interface
-```bash
-python cli.py contacts.vcf output.html
-python cli.py contacts.vcf output.html --dedup merge --grid expanded --photo 640
-python cli.py contacts.vcf output/ --mode multiple --quiet
-```
+### Persistent settings
+All options are saved to `~/.vcf_converter_config.json` and restored on next launch.
+
+### Logging
+Structured log at `~/.vcf_converter.log` with timestamps. Full traceback on export errors.
 
 ## Requirements
 
@@ -55,64 +73,77 @@ pip install -r requirements.txt
 
 Dependencies: `customtkinter`, `charset-normalizer`, `Pillow`
 
-## Usage
+## GUI usage
 
 ```bash
 python main.py
 ```
 
-1. Click **Browse** to select a `.vcf` file — contact count is shown immediately
-2. Choose the output destination
-3. Configure options: export mode, grid style, photo compression, field selection, duplicate handling
-4. Click **Convert** — optionally open the result automatically
+1. **Browse** — select a `.vcf` file (contact count shown immediately)
+2. **Output** — choose destination file or folder
+3. Configure: export mode, grid style, photo compression, fields, duplicates
+4. **Convert** — progress bar shown during export; optionally open the result
 
-## CLI Usage
+## CLI usage
 
-```
-python cli.py input.vcf output.html [options]
-
-Options:
-  --mode {single,multiple}   single HTML file or one per contact (default: single)
-  --grid {compact,expanded}  card style (default: compact)
-  --dedup {none,delete,merge} duplicate handling (default: none)
-  --fuzzy                    fuzzy name matching for dedup
-  --photo MAX_PX             max photo size in px; 0=original, -1=strip (default: 0)
-  --fields FIELD,...         comma-separated list of fields to include
-  --title TITLE              custom HTML page title
-  --quiet, -q                suppress progress output
+```bash
+python cli.py input.vcf output.html
+python cli.py input.vcf output.csv --mode csv
+python cli.py input.vcf out/ --mode multiple --dedup merge --grid expanded
+python cli.py input.vcf output.html --dedup delete --fuzzy --photo 640 --quiet
 ```
 
-## Project Structure
+```
+positional:
+  input           Input .vcf file
+  output          Output path (.html, .csv, or folder for --mode multiple)
+
+options:
+  --mode          single | multiple | csv  (default: single)
+  --grid          compact | expanded       (default: compact)
+  --dedup         none | delete | merge    (default: none)
+  --fuzzy         Fuzzy name matching for dedup (Anna Maria = Maria Anna)
+  --photo MAX_PX  Max photo size in px; 0 = original, -1 = strip (default: 0)
+  --fields        Comma-separated field list (default: all)
+  --title         Custom HTML page title
+  --quiet, -q     Suppress progress output
+```
+
+## Project structure
 
 | File | Purpose |
 |---|---|
 | `main.py` | GUI entry point (CustomTkinter) |
 | `cli.py` | Command-line interface (argparse) |
 | `vcf_parser.py` | vCard parser — folding, QP, charset detection, typed fields, X-* |
-| `html_export.py` | Generates the interactive HTML with filters and photo compression |
-| `dedup.py` | Duplicate detection, merging logic, fuzzy name matching |
-| `tests/` | pytest test suite — parser and dedup coverage |
-| `CHANGELOG.md` | Version history |
+| `html_export.py` | HTML / CSV export, in-browser edit mode |
+| `dedup.py` | Duplicate detection, merge logic, fuzzy name matching |
+| `tests/` | pytest test suite with sample fixtures |
+| `.github/workflows/build.yml` | CI: builds macOS, Windows, Linux binaries on release tags |
 
-## Running Tests
+## Running tests
 
 ```bash
 pip install pytest
 pytest tests/ -v
 ```
 
-## Platforms
+34 tests covering the parser (vCard 2.1/3.0, QP encoding, RFC folding, typed fields, social profiles, catch-all) and dedup (delete/merge, richest-copy selection, fuzzy matching).
 
-Tested on macOS (Apple Silicon). Should work on Windows and Linux with Python 3.10+.
-
-## Building a Standalone App
+## Building a standalone app locally
 
 ```bash
 pip install pyinstaller
-pyinstaller --windowed --name "VCF Converter" --collect-all customtkinter main.py
+pyinstaller --windowed --name "VCF Converter" --collect-all customtkinter --noconfirm main.py
 ```
 
-Output: `dist/VCF Converter.app` (macOS) or `dist/VCF Converter.exe` (Windows).
+Output: `dist/VCF Converter.app` (macOS) · `dist/VCF Converter/VCF Converter.exe` (Windows) · `dist/VCF Converter/VCF Converter` (Linux)
+
+> **macOS note:** Without Apple notarization, Gatekeeper will warn on first launch. Right-click the `.app` → Open to run it anyway.
+
+## Platforms
+
+Tested on macOS 15 (Apple Silicon). Should work on Windows 10+ and Linux with Python 3.10+.
 
 ## Changelog
 

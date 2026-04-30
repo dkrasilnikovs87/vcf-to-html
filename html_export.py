@@ -10,6 +10,7 @@ New in this version:
 
 import os
 import io
+import csv as csv_module
 import base64
 import json
 import html as htmllib
@@ -235,10 +236,59 @@ body {
 
 .empty { text-align: center; color: #bbb; padding: 60px 20px; font-size: 0.92rem; }
 #grid-view { padding-bottom: 40px; }
+
+/* ── Edit mode ── */
+.edit-btn {
+    background: none; border: 1px solid #ddd; border-radius: 8px;
+    padding: 6px 12px; cursor: pointer; font-size: 0.82rem; color: #555;
+}
+.edit-btn:hover { background: #f5f5f5; }
+.edit-btn.active { background: #fff3cd; border-color: #f0ad4e; color: #856404; }
+.save-btn {
+    background: #50C878; color: #fff; border: none; border-radius: 8px;
+    padding: 6px 14px; cursor: pointer; font-size: 0.82rem; font-weight: 500;
+}
+.save-btn:hover { background: #3dae63; }
+.card-wrap { position: relative; }
+.del-badge {
+    position: absolute; top: 6px; right: 6px; width: 22px; height: 22px;
+    border-radius: 50%; background: #FF6B6B; color: #fff; border: none;
+    cursor: pointer; font-size: 0.9rem; line-height: 22px; text-align: center;
+    display: none; z-index: 5;
+}
+.edit-mode .del-badge { display: block; }
+.edit-card { background: #fff; border-radius: 16px; box-shadow: 0 2px 10px rgba(0,0,0,.08); padding: 22px; }
+.edit-card h3 { margin-bottom: 16px; font-size: 1.05rem; }
+.ef-group { margin-bottom: 14px; }
+.ef-group label { display: block; font-size: 0.7rem; font-weight: 700; color: #bbb;
+    text-transform: uppercase; letter-spacing: .07em; margin-bottom: 4px; }
+.ef-input-full { width: 100%; border: 1px solid #ddd; border-radius: 8px;
+    padding: 7px 10px; font-size: 0.9rem; outline: none; }
+.ef-input-full:focus { border-color: #4A90D9; }
+.ef-typed-row { display: flex; gap: 6px; margin-bottom: 6px; }
+.ef-val-input { flex: 1; border: 1px solid #ddd; border-radius: 8px;
+    padding: 6px 10px; font-size: 0.86rem; outline: none; }
+.ef-type-input { width: 90px; border: 1px solid #ddd; border-radius: 8px;
+    padding: 6px 10px; font-size: 0.82rem; color: #888; outline: none; }
+.ef-val-input:focus, .ef-type-input:focus { border-color: #4A90D9; }
+.ef-textarea { width: 100%; border: 1px solid #ddd; border-radius: 8px;
+    padding: 7px 10px; font-size: 0.86rem; outline: none; min-height: 80px;
+    resize: vertical; font-family: inherit; }
+.ef-textarea:focus { border-color: #4A90D9; }
+.ef-actions { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+.btn-save-edit { background: #4A90D9; color: #fff; border: none; border-radius: 8px;
+    padding: 8px 18px; cursor: pointer; font-size: 0.86rem; font-weight: 500; }
+.btn-save-edit:hover { background: #357abd; }
+.btn-cancel-edit { background: none; border: 1px solid #ddd; border-radius: 8px;
+    padding: 8px 14px; cursor: pointer; font-size: 0.86rem; color: #555; }
+.btn-cancel-edit:hover { background: #f5f5f5; }
+.btn-danger { background: #FF6B6B; color: #fff; border: none; border-radius: 8px;
+    padding: 8px 14px; cursor: pointer; font-size: 0.86rem; margin-left: auto; }
+.btn-danger:hover { background: #e05555; }
 """
 
 _JS = r"""
-const contacts = __CONTACTS_DATA__;
+const contacts = /*@D*/__CONTACTS_DATA__/*@/D*/;
 const config   = __CONFIG_DATA__;
 
 // ── Filter state ──────────────────────────────────────────────────────────────
@@ -247,6 +297,8 @@ let activeChip  = 'all';
 let activeOrg   = '';
 let searchQuery = '';
 let savedScrollY = 0;
+let editMode = false;
+let hasUnsavedChanges = false;
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 function esc(s) {
@@ -364,9 +416,13 @@ function renderCompactCard(c) {
         ? `<div class="card-org">${esc(c.organization)}</div>` : '';
     const ph  = (config.fields.phones && c.phones.length)
         ? `<div class="card-phone">${esc(c.phones[0].value)}</div>` : '';
-    return `<div class="card" onclick="showDetail(${c.id})" title="Click to open">
-        <div class="card-avatar">${av}</div>
-        <div class="card-name">${esc(c.full_name)}</div>${org}${ph}
+    const onclick = editMode ? `showEditForm(${c.id})` : `showDetail(${c.id})`;
+    return `<div class="card-wrap">
+        <button class="del-badge" onclick="event.stopPropagation();deleteContact(${c.id})" title="Delete">✕</button>
+        <div class="card" onclick="${onclick}" title="${editMode ? 'Click to edit' : 'Click to open'}">
+            <div class="card-avatar">${av}</div>
+            <div class="card-name">${esc(c.full_name)}</div>${org}${ph}
+        </div>
     </div>`;
 }
 
@@ -465,6 +521,126 @@ function showGrid() {
     requestAnimationFrame(() => window.scrollTo(0, savedScrollY));
 }
 
+// ── Edit mode ─────────────────────────────────────────────────────────────────
+function toggleEdit() {
+    editMode = !editMode;
+    const btn = document.getElementById('edit-toggle');
+    btn.textContent = editMode ? '✎ Done' : '✎ Edit';
+    btn.classList.toggle('active', editMode);
+    document.getElementById('grid-view').classList.toggle('edit-mode', editMode);
+    renderGrid();
+    showGrid();
+}
+
+function updateSaveButton() {
+    document.getElementById('save-html-btn').style.display = hasUnsavedChanges ? 'inline-block' : 'none';
+}
+
+function showEditForm(id) {
+    savedScrollY = window.scrollY;
+    const c = contacts.find(x => x.id === id);
+    if (!c) return;
+
+    const phonesHTML = c.phones.map((p, i) =>
+        `<div class="ef-typed-row">
+            <input class="ef-val-input" data-f="phones" data-i="${i}" data-k="value" value="${esc(p.value)}" placeholder="Number">
+            <input class="ef-type-input" data-f="phones" data-i="${i}" data-k="type" value="${esc(p.type)}" placeholder="Type">
+        </div>`).join('');
+
+    const emailsHTML = c.emails.map((e, i) =>
+        `<div class="ef-typed-row">
+            <input class="ef-val-input" data-f="emails" data-i="${i}" data-k="value" value="${esc(e.value)}" placeholder="Address">
+            <input class="ef-type-input" data-f="emails" data-i="${i}" data-k="type" value="${esc(e.type)}" placeholder="Type">
+        </div>`).join('');
+
+    document.getElementById('detail-content').innerHTML = `
+        <div class="edit-card">
+            <h3>Edit Contact</h3>
+            <div class="ef-group">
+                <label>Full Name</label>
+                <input id="ef-name" class="ef-input-full" value="${esc(c.full_name)}">
+            </div>
+            ${c.phones.length ? `<div class="ef-group"><label>Phones</label>${phonesHTML}</div>` : ''}
+            ${c.emails.length ? `<div class="ef-group"><label>Emails</label>${emailsHTML}</div>` : ''}
+            <div class="ef-group">
+                <label>Note</label>
+                <textarea id="ef-note" class="ef-textarea">${esc(c.note)}</textarea>
+            </div>
+            <div class="ef-actions">
+                <button class="btn-save-edit" onclick="saveEdit(${id})">Save</button>
+                <button class="btn-cancel-edit" onclick="showGrid()">Cancel</button>
+                <button class="btn-danger" onclick="deleteContact(${id})">Delete Contact</button>
+            </div>
+        </div>`;
+
+    document.getElementById('grid-view').style.display   = 'none';
+    document.getElementById('detail-view').style.display = 'block';
+    window.scrollTo(0, 0);
+}
+
+function saveEdit(id) {
+    const idx = contacts.findIndex(x => x.id === id);
+    if (idx < 0) return;
+    const c = contacts[idx];
+
+    const newName = document.getElementById('ef-name').value.trim();
+    if (newName) { c.full_name = newName; c.formatted_name = newName; }
+
+    document.querySelectorAll('[data-f]').forEach(el => {
+        const f = el.dataset.f, i = +el.dataset.i, k = el.dataset.k;
+        if (c[f] && c[f][i] !== undefined) c[f][i][k] = el.value;
+    });
+
+    c.note = document.getElementById('ef-note').value;
+    contacts[idx] = c;
+    hasUnsavedChanges = true;
+    updateSaveButton();
+    applyFilters();
+    showGrid();
+}
+
+function deleteContact(id) {
+    if (!confirm('Delete this contact? This cannot be undone in the current view.')) return;
+    const idx = contacts.findIndex(x => x.id === id);
+    if (idx < 0) return;
+    contacts.splice(idx, 1);
+    hasUnsavedChanges = true;
+    updateSaveButton();
+    applyFilters();
+    showGrid();
+}
+
+function saveHTML() {
+    const cardsEl = document.getElementById('cards');
+    const savedCards = cardsEl.innerHTML;
+    cardsEl.innerHTML = '';
+    const detailEl = document.getElementById('detail-content');
+    const savedDetail = detailEl.innerHTML;
+    detailEl.innerHTML = '';
+
+    const src = document.documentElement.outerHTML;
+    cardsEl.innerHTML = savedCards;
+    detailEl.innerHTML = savedDetail;
+
+    const START = '/*@D*/';
+    const END   = '/*@/D*/';
+    const s = src.indexOf(START) + START.length;
+    const e = src.indexOf(END);
+    if (s < START.length || e < 0) { alert('Save failed: data markers not found.'); return; }
+
+    const newData = JSON.stringify(contacts).replace(/<\//g, '<\\/');
+    const updated = src.slice(0, s) + newData + src.slice(e);
+
+    const blob = new Blob([updated], { type: 'text/html;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (document.title + '_edited').replace(/[^\w.\-]/g, '_') + '.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+}
+
 // ── VCF export ────────────────────────────────────────────────────────────────
 function exportVCF(id) {
     const c = contacts.find(x => x.id === id);
@@ -510,8 +686,9 @@ applyFilters();
 
 
 def _build_page(contacts_data: list[dict], config: dict, title: str) -> str:
-    contacts_json = json.dumps(contacts_data, ensure_ascii=False)
-    config_json   = json.dumps(config,        ensure_ascii=False)
+    # Escape </ → <\/ so the JSON cannot accidentally close a <script> tag
+    contacts_json = json.dumps(contacts_data, ensure_ascii=False).replace('</', '<\\/')
+    config_json   = json.dumps(config,        ensure_ascii=False).replace('</', '<\\/')
     js = _JS.replace('__CONTACTS_DATA__', contacts_json).replace('__CONFIG_DATA__', config_json)
     count = len(contacts_data)
 
@@ -529,6 +706,8 @@ def _build_page(contacts_data: list[dict], config: dict, title: str) -> str:
 <div class="header">
     <h1>{htmllib.escape(title)}</h1>
     <input class="search" id="search" type="search" placeholder="Search…">
+    <button class="edit-btn" id="edit-toggle" onclick="toggleEdit()">✎ Edit</button>
+    <button class="save-btn" id="save-html-btn" style="display:none" onclick="saveHTML()">⬇ Save HTML</button>
 </div>
 
 <!-- Filter bar: quick chips + org dropdown + live count -->
@@ -617,3 +796,59 @@ def export_multiple(contacts: list[Contact], out_dir: str,
             f.write(html)
         if progress_cb:
             progress_cb((i + 1) / total)
+
+
+def export_csv(contacts: list[Contact], out_path: str,
+               fields: dict = None, progress_cb=None):
+    """
+    Export contacts to CSV with UTF-8 BOM so Excel opens it correctly on all platforms.
+    Multi-value fields (phones, emails) are joined with ' | '.
+    """
+    if fields is None:
+        fields = _all_fields()
+
+    def _typed(lst: list) -> str:
+        parts = []
+        for item in lst:
+            v = item.get('value', '')
+            t = item.get('type', '')
+            parts.append(f"{v} ({t})" if t else v)
+        return ' | '.join(parts)
+
+    def _joined(lst: list) -> str:
+        return ' | '.join(item.get('value', '') for item in lst if item.get('value'))
+
+    headers = ['Full Name', 'First Name', 'Last Name']
+    if fields.get('nickname'):      headers.append('Nickname')
+    if fields.get('organization'):  headers.extend(['Organization', 'Title', 'Role'])
+    if fields.get('phones'):        headers.append('Phones')
+    if fields.get('emails'):        headers.append('Emails')
+    if fields.get('addresses'):     headers.append('Addresses')
+    if fields.get('urls'):          headers.append('Websites')
+    if fields.get('birthday'):      headers.append('Birthday')
+    if fields.get('anniversary'):   headers.append('Anniversary')
+    if fields.get('note'):          headers.append('Note')
+    if fields.get('custom_fields'): headers.append('Social / IM / Custom')
+
+    total = len(contacts)
+    with open(out_path, 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv_module.writer(f)
+        writer.writerow(headers)
+        for i, c in enumerate(contacts):
+            row = [c.full_name, c.first_name, c.last_name]
+            if fields.get('nickname'):      row.append(c.nickname)
+            if fields.get('organization'):  row.extend([c.organization, c.title, c.role])
+            if fields.get('phones'):        row.append(_typed(c.phones))
+            if fields.get('emails'):        row.append(_typed(c.emails))
+            if fields.get('addresses'):     row.append(_joined(c.addresses))
+            if fields.get('urls'):          row.append(_joined(c.urls))
+            if fields.get('birthday'):      row.append(c.birthday)
+            if fields.get('anniversary'):   row.append(c.anniversary)
+            if fields.get('note'):          row.append(c.note)
+            if fields.get('custom_fields'):
+                row.append(' | '.join(
+                    f"{x['label']}: {x['value']}" for x in c.custom_fields
+                ))
+            writer.writerow(row)
+            if progress_cb:
+                progress_cb((i + 1) / total)
