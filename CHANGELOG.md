@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.0.0a] - 2026-10-16
+
+### Added
+- **vCard 4.0 & Apple / iCloud Group Label Support** — automatic grouping of `item1.TEL` and `item1.X-ABLabel` preserving custom labels (e.g., Work Mobile, Assistant, etc.)
+- **TypedField Data Structure** — typed access via `.value`, `.type`, `.label` while maintaining 100% dictionary backward compatibility
+- **RFC Escaping Engine** — full unescaping support for `\n`, `\,`, `\;`, `\\` across all text properties
+- **Quoted Parameter Lexer** — RFC 6350 compliant parameter parsing handling semicolons and commas inside quoted values
+- **Safe Block Extraction** — line-by-line state machine parser preventing premature card termination when fields (e.g. `NOTE`) contain `END:VCARD`
+- **Strict Parsing Option** — `parse_file(..., strict=True)` to control error propagation
+
+---
+
 ## [1.3.0] - 2026-04-30
 
 ### Added
