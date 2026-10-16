@@ -196,3 +196,77 @@ def test_qp_multiline_join():
     c = parse_vcard(vcard)
     assert "Hello" in c.note
     assert "World" in c.note
+
+
+# ── Refactored Parser v2.0 Features ──────────────────────────────────────────
+
+def test_apple_group_labels():
+    """Apple/iCloud group-associated custom labels (item1.TEL + item1.X-ABLabel)."""
+    vcard = (
+        "BEGIN:VCARD\n"
+        "FN:Apple User\n"
+        "item1.TEL;type=pref:+123456789\n"
+        "item1.X-ABLabel:_$!<Work Mobile>!$_\n"
+        "item2.EMAIL:user@apple.com\n"
+        "item2.X-ABLabel:Custom Email\n"
+        "END:VCARD"
+    )
+    c = parse_vcard(vcard)
+    assert c.phones[0].type == "Work Mobile"
+    assert c.phones[0].value == "+123456789"
+    assert c.emails[0].type == "Custom Email"
+    assert c.emails[0].value == "user@apple.com"
+
+
+def test_rfc_escaped_characters():
+    """RFC 2426/6350 backslash escaping (\\n, \\,, \\;, \\\\)."""
+    vcard = (
+        "BEGIN:VCARD\n"
+        "FN:Escape Test\n"
+        "NOTE:Line 1\\nLine 2\\, with comma\\; and semicolon\\\\backslash\n"
+        "END:VCARD"
+    )
+    c = parse_vcard(vcard)
+    assert c.note == "Line 1\nLine 2, with comma; and semicolon\\backslash"
+
+
+def test_quoted_parameter_semicolon():
+    """Quoted parameter values with commas/semicolons."""
+    vcard = (
+        "BEGIN:VCARD\n"
+        "FN:Quoted Param\n"
+        "TEL;TYPE=\"WORK,VOICE\":+12345\n"
+        "END:VCARD"
+    )
+    c = parse_vcard(vcard)
+    assert len(c.phones) == 1
+    assert "Work" in c.phones[0].type
+
+
+def test_note_containing_end_vcard():
+    """Contact notes mentioning 'END:VCARD' must not prematurely terminate parsing."""
+    vcard = (
+        "BEGIN:VCARD\n"
+        "FN:Tricky Contact\n"
+        "NOTE:Remember to check END:VCARD carefully in the docs\n"
+        "TEL:+98765\n"
+        "END:VCARD"
+    )
+    c = parse_vcard(vcard)
+    assert c.full_name == "Tricky Contact"
+    assert "END:VCARD" in c.note
+    assert len(c.phones) == 1
+    assert c.phones[0].value == "+98765"
+
+
+def test_typed_field_properties_and_dict_access():
+    """TypedField must support both dict index access and object attribute access."""
+    from vcf_parser import TypedField
+    tf = TypedField(value="+123", type="Work", label="Office")
+    assert tf["value"] == "+123"
+    assert tf.value == "+123"
+    assert tf["type"] == "Work"
+    assert tf.type == "Work"
+    assert tf["label"] == "Office"
+    assert tf.label == "Office"
+
